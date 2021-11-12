@@ -35,7 +35,7 @@ public class test : MonoBehaviour
         Vector3 dir1 = Vector3.Normalize(point1.position - trans.position);
         Gizmos.DrawLine(start, start + dir0);
         Gizmos.DrawLine(start, start + dir1);
-        Vector3 res = dir0 - dir1 * Vector3.Dot(dir0, dir1);
+        Vector3 res = dir0 - Vector3.up * Vector3.Dot(dir0, Vector3.up);
         Gizmos.color = Color.green;
         Gizmos.DrawLine(start, start + res * Radius);
         if (point2 != null)

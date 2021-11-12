@@ -1,6 +1,8 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Experimental.Rendering;
+using UnityEngine.Rendering;
 
 [ExecuteInEditMode]
 [RequireComponent(typeof(Camera))]
@@ -8,6 +10,16 @@ public class TAA : MonoBehaviour
 {
     [Range(0, 10)]
     public float JitterSpread = 0.75f;
+    [Range(0.01f, 5)]
+    public float StationaryAABBScale = 1.25f;
+    [Range(0.01f, 5)]
+    public float MotionAABBScale = .5f;
+    [Range(0.01f, 5)]
+    public float StationaryBlend = .95f;
+    [Range(0.01f, 5)]
+    public float MotionBlend = .9f;
+    [Range(0, 3)]
+    public float Sharpness = .25f;
 
     const int k_SampleCount = 8;
     int sampleIndex;
@@ -15,29 +27,37 @@ public class TAA : MonoBehaviour
 
     Camera cam;
     Material material;
+    RenderTexture prevTex;
 
-    static int _JitterTexelSize = Shader.PropertyToID("_JitterTexelSize");
+    static int _PrevTex = Shader.PropertyToID("_PrevTex");
+    static int _JitterTexelOffset = Shader.PropertyToID("_JitterTexelOffset");
+    static int _AABBScale = Shader.PropertyToID("_AABBScale");
+    static int _Blend = Shader.PropertyToID("_Blend");
+    static int _Sharpness = Shader.PropertyToID("_Sharpness");
 
     void Awake()
     {
         cam = GetComponent<Camera>();
         material = new Material(Shader.Find("PostProcessing/TAA"));
+        material.hideFlags = HideFlags.HideAndDontSave;
     }
 
     void OnEnable()
     {
         cam.depthTextureMode |= DepthTextureMode.Depth;
         cam.depthTextureMode |= DepthTextureMode.MotionVectors;
+        prevTex = new RenderTexture(cam.pixelWidth, cam.pixelHeight, 0, RenderTextureFormat.ARGBHalf);
+        material.SetTexture(_PrevTex, prevTex);
     }
 
     void OnDisable()
     {
         cam.depthTextureMode &= ~DepthTextureMode.MotionVectors;
         cam.depthTextureMode &= ~DepthTextureMode.Depth;
-
         sampleIndex = 0;
         jitterTexelSize = Vector4.zero;
         cam.projectionMatrix = cam.nonJitteredProjectionMatrix;
+        DestroyImmediate(prevTex);
     }
 
     private void OnPreCull()
@@ -56,8 +76,12 @@ public class TAA : MonoBehaviour
 
     void OnRenderImage(RenderTexture source, RenderTexture destination)
     {
-        material.SetVector(_JitterTexelSize, jitterTexelSize);
-        Graphics.Blit(source, destination, material);
+        material.SetVector(_JitterTexelOffset, jitterTexelSize);
+        material.SetVector(_AABBScale, new Vector2(StationaryAABBScale, MotionAABBScale));
+        material.SetVector(_Blend, new Vector2(StationaryBlend, MotionBlend));
+        material.SetFloat(_Sharpness, Sharpness);
+        Graphics.Blit(source, prevTex, material);
+        Graphics.Blit(prevTex, destination);
     }
 
     static float HaltonSeq(int refer, int index = 1/* NOT! zero-based */)

@@ -56,6 +56,7 @@ namespace PostProcessing
         {
             cam = GetComponent<Camera>();
             material = new Material(Shader.Find("PostProcessing/GTAO"));
+            material.hideFlags = HideFlags.HideAndDontSave;
         }
 
         void OnEnable()
