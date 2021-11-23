@@ -33,15 +33,9 @@ Shader "PostProcessing/TAA"
 		sampler2D _CameraDepthTexture;
 		sampler2D _CameraMotionVectorsTexture;
 		sampler2D _PrevTex;
+		sampler2D _MotionVectorsTex;
 		float4 _JitterTexelOffset;
-		float2 _AABBScale;
 		float2 _Blend;
-		float _Sharpness;
-
-		inline float SampleDepth(float2 uv)
-		{
-			return SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, uv);
-		}
 
 		inline float4 pow2(float4 i)
 		{
@@ -70,46 +64,15 @@ Shader "PostProcessing/TAA"
 			return float4(YCoCgToRGB(YCoCg.xyz), YCoCg.w); 
 		}
 
-		inline float Luma4(float3 Color)
+		inline float SampleDepth(float2 uv)
 		{
-			return Color.g * 2 + Color.r + Color.b;
+			return SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, uv);
 		}
 
-		inline float HdrWeight4(float3 Color, const float Exposure) 
+		inline float4 SampleYCoCg(float2 uv)
 		{
-			return rcp(Luma4(Color) * Exposure + 4);
-		}
-
-		float3 ClipToAABB(float3 color, float3 minimum, float3 maximum)
-		{
-			// Note: only clips towards aabb center (but fast!)
-			float3 center = 0.5 * (maximum + minimum);
-			float3 extents = 0.5 * (maximum - minimum);
-
-			// This is actually `distance`, however the keyword is reserved
-			float3 offset = color.rgb - center;
-
-			float3 ts = abs(extents / (offset + 0.0001));
-			float t = saturate(min(ts.x, min(ts.y, ts.z)));
-			color.rgb = center + offset * t;
-			return color;
-		}
-
-		float4 clip_aabb(float3 aabb_min, float3 aabb_max, float4 p, float4 q)
-		{
-			// note: only clips towards aabb center (but fast!)
-			float3 p_clip = 0.5 * (aabb_max + aabb_min);
-			float3 e_clip = 0.5 * (aabb_max - aabb_min) + 0.00000001;
-
-			float4 v_clip = q - float4(p_clip, p.w);
-			float3 v_unit = v_clip.xyz / e_clip;
-			float3 a_unit = abs(v_unit);
-			float ma_unit = max(a_unit.x, max(a_unit.y, a_unit.z));
-
-			if (ma_unit > 1.0)
-				return float4(p_clip, p.w) + v_clip / ma_unit;
-			else
-				return q;// point inside aabb
+			float4 col = tex2D(_MainTex, uv);
+			return RGBToYCoCg(col);
 		}
 
 		static const int2 _Offset[8] = { int2(-1, 1), int2(0, 1), int2(1, 1), int2(-1, 0), int2(1, 0), int2(-1, -1), int2(0, -1), int2(1, -1) };
@@ -133,64 +96,56 @@ Shader "PostProcessing/TAA"
 			nearestUV = uv + res.xy * _MainTex_TexelSize.xy;
 		}
 
-        fixed4 frag_TAA (v2f i) : SV_Target
+		float3 Clip_AABB(float3 center, float3 extent, float3 col)
+		{
+			float3 v_clip = col - center;
+			float3 v_unit = v_clip / extent;
+			float3 a_unit = abs(v_unit);
+			float ma_unit = max(a_unit.x, max(a_unit.y, a_unit.z));
+			[flatten]
+			if (ma_unit > 1.0)
+				return center + v_clip / ma_unit;
+			else
+				return col;
+		}
+
+		fixed4 frag_TAA (v2f i) : SV_Target
         {
-			float2 uv = i.uv - _JitterTexelOffset.xy * _MainTex_TexelSize.xy;
 			float nearestDepth;
 			float2 nearestUV;
 			SelectNearestDepthUV(i.uv, nearestDepth, nearestUV);
 			float2 velocity = tex2D(_CameraMotionVectorsTexture, nearestUV).xy;
+			float2 uv = i.uv - _JitterTexelOffset.xy * _MainTex_TexelSize.xy;
+			float2 prevUV = i.uv - velocity + (_JitterTexelOffset.zw - _JitterTexelOffset.xy) * _MainTex_TexelSize.xy;
 
-			float4 topLeft = tex2D(_MainTex, uv + _MainTex_TexelSize * int2(-1, 1));
-			float4 topCenter = tex2D(_MainTex, uv + _MainTex_TexelSize * int2(0, 1));
-			float4 topRight = tex2D(_MainTex, uv + _MainTex_TexelSize * int2(1, 1));
-			float4 left = tex2D(_MainTex, uv + _MainTex_TexelSize * int2(-1, 0));
-			float4 col = tex2D(_MainTex, uv);
-			float4 right = tex2D(_MainTex, uv + _MainTex_TexelSize * int2(1, 0));
-			float4 bottomLeft = tex2D(_MainTex, uv + _MainTex_TexelSize * int2(-1, -1));
-			float4 bottomCenter = tex2D(_MainTex, uv + _MainTex_TexelSize * int2(0, -1));
-			float4 bottomRight = tex2D(_MainTex, uv + _MainTex_TexelSize * int2(1, -1));
-			float topLeftWeight = HdrWeight4(topLeft, 10);
-			float topCenterWeight = HdrWeight4(topCenter, 10);
-			float topRightWeight = HdrWeight4(topRight, 10);
-			float leftWeight = HdrWeight4(left, 10);
-			float colWeight = HdrWeight4(col, 10);
-			float rightWeight = HdrWeight4(right, 10);
-			float bottomLeftWeight = HdrWeight4(bottomLeft, 10);
-			float bottomCenterWeight = HdrWeight4(bottomCenter, 10);
-			float bottomRightWeight = HdrWeight4(bottomRight, 10);
-			topLeft = RGBToYCoCg(topLeft);
-			topCenter = RGBToYCoCg(topCenter);
-			topRight = RGBToYCoCg(topRight);
-			left = RGBToYCoCg(left);
-			col = RGBToYCoCg(col);
-			right = RGBToYCoCg(right);
-			bottomLeft = RGBToYCoCg(bottomLeft);
-			bottomCenter = RGBToYCoCg(bottomCenter);
-			bottomRight = RGBToYCoCg(bottomRight);
-
-			float totalWeight = topLeftWeight + topCenterWeight + topRightWeight + leftWeight + colWeight + rightWeight + bottomLeftWeight + bottomCenterWeight + bottomRightWeight;
-			float4 filtered = (topLeft * topLeftWeight + topCenter * topCenterWeight + topRight * topRightWeight + left * leftWeight + col * colWeight + right * rightWeight + bottomLeft * bottomLeftWeight + bottomCenter * bottomCenterWeight + bottomRight * bottomRightWeight) / totalWeight;
-
-			float velocityWeight = saturate(length(velocity) * 3000);
-			float AABBScale = lerp(_AABBScale.x, _AABBScale.y, velocityWeight);
-
+			float4 topLeft = SampleYCoCg(uv + _MainTex_TexelSize * int2(-1, 1));
+			float4 topCenter = SampleYCoCg(uv + _MainTex_TexelSize * int2(0, 1));
+			float4 topRight = SampleYCoCg(uv + _MainTex_TexelSize * int2(1, 1));
+			float4 left = SampleYCoCg(uv + _MainTex_TexelSize * int2(-1, 0));
+			float4 col = SampleYCoCg(uv);
+			float4 right = SampleYCoCg(uv + _MainTex_TexelSize * int2(1, 0));
+			float4 bottomLeft = SampleYCoCg(uv + _MainTex_TexelSize * int2(-1, -1));
+			float4 bottomCenter = SampleYCoCg(uv + _MainTex_TexelSize * int2(0, -1));
+			float4 bottomRight = SampleYCoCg(uv + _MainTex_TexelSize * int2(1, -1));
+			
 			float4 mean = (topLeft + topCenter + topRight + left + col + right + bottomLeft + bottomCenter + bottomRight) / 9;
 			float4 stddev = sqrt((pow2(topLeft) + pow2(topCenter) + pow2(topRight) + pow2(left) + pow2(col) + pow2(right) + pow2(bottomLeft) + pow2(bottomCenter) + pow2(bottomRight)) / 9 - pow2(mean));
 
-			float4 minCol = mean - AABBScale * stddev;
-			float4 maxCol = mean + AABBScale * stddev;
-			minCol = min(minCol, filtered);
-			maxCol = max(maxCol, filtered);
+			float4 prevCol = RGBToYCoCg(tex2D(_PrevTex, prevUV));
+			prevCol.xyz = Clip_AABB(mean, stddev, prevCol);
 
-			col = YCoCgToRGB(col);
-			float2 prevUV = i.uv - velocity + (_JitterTexelOffset.zw - _JitterTexelOffset.xy) * _MainTex_TexelSize.xy;
-			float4 prevCol = tex2D(_PrevTex, prevUV);
-			prevCol.rgb = YCoCgToRGB(clip_aabb(minCol, maxCol, clamp(mean, minCol, maxCol), RGBToYCoCg(prevCol)));
-			float historyWeight = lerp(_Blend.x, _Blend.y, velocityWeight);
-			col = lerp(col, prevCol, historyWeight);
+			float DIF = 1 - abs(col.r - prevCol.r) / max(col.r, max(prevCol.r, 0.2));
+			float weight_sqr = pow2(DIF);
+			float feedback = lerp(_Blend.x, _Blend.y, weight_sqr);
+			float4 color_temporal = YCoCgToRGB(lerp(col, prevCol, feedback));
+			return color_temporal;
+        }
+
+		fixed4 frag (v2f i) : SV_Target
+        {
+			float2 uv = i.uv - _JitterTexelOffset.xy * _MainTex_TexelSize.xy;
 			
-			return max(0, col);
+			return tex2D(_MotionVectorsTex, uv);
         }
 		ENDCG
 
@@ -203,5 +158,13 @@ Shader "PostProcessing/TAA"
             #pragma fragment frag_TAA
             ENDCG
         }
+
+		Pass
+		{
+			CGPROGRAM
+			#pragma vertex vert
+			#pragma fragment frag;
+			ENDCG
+		}
     }
 }

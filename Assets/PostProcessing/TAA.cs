@@ -10,36 +10,36 @@ public class TAA : MonoBehaviour
 {
     [Range(0, 10)]
     public float JitterSpread = 0.75f;
-    [Range(0.01f, 5)]
-    public float StationaryAABBScale = 1.25f;
-    [Range(0.01f, 5)]
-    public float MotionAABBScale = .5f;
-    [Range(0.01f, 5)]
-    public float StationaryBlend = .95f;
-    [Range(0.01f, 5)]
-    public float MotionBlend = .9f;
-    [Range(0, 3)]
-    public float Sharpness = .25f;
+    [Range(0, 1)]
+    public float BlendMin = .88f;
+    [Range(0, 1)]
+    public float BlendMax = .97f;
 
     const int k_SampleCount = 8;
     int sampleIndex;
     Vector4 jitterTexelSize;
+    Matrix4x4 prev_VP;
+    CommandBuffer buffer;
 
     Camera cam;
     Material material;
+    Material motionVectorsMaterial;
     RenderTexture prevTex;
+    public RenderTexture motionVectorsTex;
 
     static int _PrevTex = Shader.PropertyToID("_PrevTex");
+    static int _MotionVectorsTex = Shader.PropertyToID("_MotionVectorsTex");
+    static int _Prev_VP = Shader.PropertyToID("_Prev_VP");
     static int _JitterTexelOffset = Shader.PropertyToID("_JitterTexelOffset");
-    static int _AABBScale = Shader.PropertyToID("_AABBScale");
     static int _Blend = Shader.PropertyToID("_Blend");
-    static int _Sharpness = Shader.PropertyToID("_Sharpness");
 
     void Awake()
     {
         cam = GetComponent<Camera>();
         material = new Material(Shader.Find("PostProcessing/TAA"));
         material.hideFlags = HideFlags.HideAndDontSave;
+        motionVectorsMaterial = new Material(Shader.Find("PostProcessing/MotionVectors"));
+        motionVectorsMaterial.hideFlags = HideFlags.HideAndDontSave;
     }
 
     void OnEnable()
@@ -47,7 +47,14 @@ public class TAA : MonoBehaviour
         cam.depthTextureMode |= DepthTextureMode.Depth;
         cam.depthTextureMode |= DepthTextureMode.MotionVectors;
         prevTex = new RenderTexture(cam.pixelWidth, cam.pixelHeight, 0, RenderTextureFormat.ARGBHalf);
+        motionVectorsTex = new RenderTexture(cam.pixelWidth, cam.pixelHeight, 16, RenderTextureFormat.RGFloat);
+        motionVectorsTex.filterMode = FilterMode.Point;
         material.SetTexture(_PrevTex, prevTex);
+        material.SetTexture(_MotionVectorsTex, motionVectorsTex);
+        buffer = new CommandBuffer();
+        buffer.name = "VelocityBuffer";
+        buffer.SetRenderTarget(motionVectorsTex);
+        cam.AddCommandBuffer(CameraEvent.BeforeForwardOpaque, buffer);
     }
 
     void OnDisable()
@@ -58,9 +65,12 @@ public class TAA : MonoBehaviour
         jitterTexelSize = Vector4.zero;
         cam.projectionMatrix = cam.nonJitteredProjectionMatrix;
         DestroyImmediate(prevTex);
+        DestroyImmediate(motionVectorsTex);
+        cam.RemoveCommandBuffer(CameraEvent.BeforeForwardOpaque, buffer);
+        buffer = null;
     }
 
-    private void OnPreCull()
+    void OnPreCull()
     {
         Vector2 offset = new Vector2(HaltonSeq(2, sampleIndex + 1), HaltonSeq(3, sampleIndex + 1));
         offset = (offset - Vector2.one * 0.5f) * JitterSpread;
@@ -74,14 +84,30 @@ public class TAA : MonoBehaviour
         cam.projectionMatrix = proj;
     }
 
+    private void OnPreRender()
+    {
+        buffer.ClearRenderTarget(true, true, Color.black);
+        for (int i = 0; i < VelocityBufferTag.list.Count; i++)
+        {
+            VelocityBufferTag tag = VelocityBufferTag.list[i];
+            if (!tag.IsAvailable)
+                continue;
+            buffer.DrawRenderer(tag.renderer, motionVectorsMaterial);
+        }
+        Matrix4x4 proj = GL.GetGPUProjectionMatrix(cam.projectionMatrix, false);
+        prev_VP = cam.worldToCameraMatrix * proj;
+    }
+
     void OnRenderImage(RenderTexture source, RenderTexture destination)
     {
         material.SetVector(_JitterTexelOffset, jitterTexelSize);
-        material.SetVector(_AABBScale, new Vector2(StationaryAABBScale, MotionAABBScale));
-        material.SetVector(_Blend, new Vector2(StationaryBlend, MotionBlend));
-        material.SetFloat(_Sharpness, Sharpness);
-        Graphics.Blit(source, prevTex, material);
-        Graphics.Blit(prevTex, destination);
+        material.SetVector(_Blend, new Vector2(BlendMin, BlendMax));
+
+        RenderTexture tex = RenderTexture.GetTemporary(source.descriptor);
+        Graphics.Blit(source, tex, material, 1);
+        Graphics.Blit(tex, prevTex);
+        Graphics.Blit(tex, destination);
+        RenderTexture.ReleaseTemporary(tex);
     }
 
     static float HaltonSeq(int refer, int index = 1/* NOT! zero-based */)
