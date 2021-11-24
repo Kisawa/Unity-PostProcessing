@@ -141,11 +141,11 @@ Shader "PostProcessing/TAA"
 			return color_temporal;
         }
 
-		fixed4 frag (v2f i) : SV_Target
+		fixed4 frag_customMotion (v2f i) : SV_Target
         {
 			float2 uv = i.uv - _JitterTexelOffset.xy * _MainTex_TexelSize.xy;
-			
-			return tex2D(_MotionVectorsTex, uv);
+			float2 velocity = tex2D(_MotionVectorsTex, uv);
+			return fixed4(velocity, 0, 1);
         }
 		ENDCG
 
@@ -163,7 +163,7 @@ Shader "PostProcessing/TAA"
 		{
 			CGPROGRAM
 			#pragma vertex vert
-			#pragma fragment frag;
+			#pragma fragment frag_customMotion;
 			ENDCG
 		}
     }

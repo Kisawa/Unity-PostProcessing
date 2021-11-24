@@ -1,9 +1,5 @@
 Shader "PostProcessing/MotionVectors"
 {
-    Properties
-    {
-        _MainTex ("Texture", 2D) = "white" {}
-    }
     SubShader
     {
 		CGINCLUDE
@@ -12,31 +8,31 @@ Shader "PostProcessing/MotionVectors"
 		struct appdata
 		{
 			float4 vertex : POSITION;
-			float2 uv : TEXCOORD0;
 		};
 
 		struct v2f
 		{
-			float2 uv : TEXCOORD0;
-			float4 vertex : SV_POSITION;
+			float4 pos : SV_POSITION;
+			float4 currentPos: TEXCOORD0;
+			float4 prevPos : TEXCOORD1;
 		};
 
-		sampler2D _MainTex;
-		float4 _MainTex_ST;
 		float4x4 _Prev_VP;
 
 		v2f vert (appdata v)
         {
             v2f o;
-            o.vertex = UnityObjectToClipPos(v.vertex);
-            o.uv = TRANSFORM_TEX(v.uv, _MainTex);
+            o.pos = UnityObjectToClipPos(v.vertex);
+			o.currentPos = ComputeScreenPos(o.pos);
+			o.prevPos = ComputeScreenPos(mul(_Prev_VP, mul(unity_ObjectToWorld, float4(v.vertex.xyz, 1.0))));
             return o;
         }
 
         fixed4 frag (v2f i) : SV_Target
         {
-            fixed4 col = tex2D(_MainTex, i.uv);
-            return col;
+            float2 currentSS = i.currentPos.xy / i.currentPos.w;
+			float2 prevSS = i.prevPos.xy / i.prevPos.w;
+            return float4((currentSS - prevSS) * 0.5, 0, 0);
         }
 		ENDCG
 

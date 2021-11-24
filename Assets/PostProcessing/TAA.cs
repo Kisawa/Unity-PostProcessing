@@ -4,10 +4,11 @@ using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering;
 
-[ExecuteInEditMode]
 [RequireComponent(typeof(Camera))]
 public class TAA : MonoBehaviour
 {
+    public static TAA Self;
+
     [Range(0, 10)]
     public float JitterSpread = 0.75f;
     [Range(0, 1)]
@@ -25,7 +26,7 @@ public class TAA : MonoBehaviour
     Material material;
     Material motionVectorsMaterial;
     RenderTexture prevTex;
-    public RenderTexture motionVectorsTex;
+    RenderTexture motionVectorsTex;
 
     static int _PrevTex = Shader.PropertyToID("_PrevTex");
     static int _MotionVectorsTex = Shader.PropertyToID("_MotionVectorsTex");
@@ -35,6 +36,7 @@ public class TAA : MonoBehaviour
 
     void Awake()
     {
+        Self = this;
         cam = GetComponent<Camera>();
         material = new Material(Shader.Find("PostProcessing/TAA"));
         material.hideFlags = HideFlags.HideAndDontSave;
@@ -51,10 +53,6 @@ public class TAA : MonoBehaviour
         motionVectorsTex.filterMode = FilterMode.Point;
         material.SetTexture(_PrevTex, prevTex);
         material.SetTexture(_MotionVectorsTex, motionVectorsTex);
-        buffer = new CommandBuffer();
-        buffer.name = "VelocityBuffer";
-        buffer.SetRenderTarget(motionVectorsTex);
-        cam.AddCommandBuffer(CameraEvent.BeforeForwardOpaque, buffer);
     }
 
     void OnDisable()
@@ -66,7 +64,7 @@ public class TAA : MonoBehaviour
         cam.projectionMatrix = cam.nonJitteredProjectionMatrix;
         DestroyImmediate(prevTex);
         DestroyImmediate(motionVectorsTex);
-        cam.RemoveCommandBuffer(CameraEvent.BeforeForwardOpaque, buffer);
+        cam.RemoveCommandBuffer(CameraEvent.AfterForwardAlpha, buffer);
         buffer = null;
     }
 
@@ -84,22 +82,11 @@ public class TAA : MonoBehaviour
         cam.projectionMatrix = proj;
     }
 
-    private void OnPreRender()
-    {
-        buffer.ClearRenderTarget(true, true, Color.black);
-        for (int i = 0; i < VelocityBufferTag.list.Count; i++)
-        {
-            VelocityBufferTag tag = VelocityBufferTag.list[i];
-            if (!tag.IsAvailable)
-                continue;
-            buffer.DrawRenderer(tag.renderer, motionVectorsMaterial);
-        }
-        Matrix4x4 proj = GL.GetGPUProjectionMatrix(cam.projectionMatrix, false);
-        prev_VP = cam.worldToCameraMatrix * proj;
-    }
-
     void OnRenderImage(RenderTexture source, RenderTexture destination)
     {
+        motionVectorsMaterial.SetMatrix(_Prev_VP, prev_VP);
+        prev_VP = GL.GetGPUProjectionMatrix(cam.projectionMatrix, true) * cam.worldToCameraMatrix;
+
         material.SetVector(_JitterTexelOffset, jitterTexelSize);
         material.SetVector(_Blend, new Vector2(BlendMin, BlendMax));
 
@@ -108,6 +95,26 @@ public class TAA : MonoBehaviour
         Graphics.Blit(tex, prevTex);
         Graphics.Blit(tex, destination);
         RenderTexture.ReleaseTemporary(tex);
+    }
+
+    public void RefreshVelocityBuffer()
+    {
+        if (!enabled)
+            return;
+        if (buffer != null)
+            cam.RemoveCommandBuffer(CameraEvent.AfterForwardAlpha, buffer);
+        buffer = new CommandBuffer();
+        buffer.name = "VelocityBuffer";
+        buffer.SetRenderTarget(motionVectorsTex, BuiltinRenderTextureType.CameraTarget);
+        buffer.ClearRenderTarget(false, true, Color.clear);
+        for (int i = 0; i < VelocityBufferTag.list.Count; i++)
+        {
+            VelocityBufferTag tag = VelocityBufferTag.list[i];
+            if (tag == null || !tag.IsAvailable)
+                continue;
+            buffer.DrawRenderer(tag.renderer, motionVectorsMaterial);
+        }
+        cam.AddCommandBuffer(CameraEvent.AfterForwardAlpha, buffer);
     }
 
     static float HaltonSeq(int refer, int index = 1/* NOT! zero-based */)
