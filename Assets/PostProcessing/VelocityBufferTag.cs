@@ -10,49 +10,48 @@ public class VelocityBufferTag : MonoBehaviour
 
     public Color col;
 
-    new public Renderer renderer { get; private set; }
-    public Matrix4x4 PrevLocalToWorld { get; private set; }
+    MeshFilter meshFilter;
+    new Renderer renderer;
+    SkinnedMeshRenderer SkinnedRenderer;
+    public Mesh Mesh { get; private set; }
+    public Matrix4x4 LocalToWorld { get; private set; }
+    public Matrix4x4 PrevLocalToWorld { get; set; }
 
     Transform trans;
-    bool isAvailable;
 
     private void Awake()
     {
         trans = transform;
+        meshFilter = GetComponent<MeshFilter>();
         renderer = GetComponent<Renderer>();
+        SkinnedRenderer = renderer as SkinnedMeshRenderer;
     }
 
-    private void Start()
+    private void LateUpdate()
     {
-        
-    }
-
-    private void Update()
-    {
-        check();
-        MaterialPropertyBlock block = new MaterialPropertyBlock();
-        renderer.GetPropertyBlock(block);
-        block.SetColor("_Color", col);
-        renderer.SetPropertyBlock(block);
+        if (meshFilter != null)
+        {
+            Mesh = meshFilter.mesh;
+            LocalToWorld = trans.localToWorldMatrix;
+        }
+        if (SkinnedRenderer != null)
+        {
+            if (Mesh == null)
+                Mesh = new Mesh();
+            else
+                Mesh.Clear();
+            SkinnedRenderer.BakeMesh(Mesh);
+            LocalToWorld = Matrix4x4.TRS(trans.position, trans.rotation, Vector3.one);
+        }
     }
 
     private void OnEnable()
     {
         list.Add(this);
-        check();
     }
 
     private void OnDisable()
     {
         list.Remove(this);
-        check();
-    }
-
-    void check()
-    {
-        if (TAA.Self == null || isAvailable == IsAvailable)
-            return;
-        isAvailable = IsAvailable;
-        TAA.Self.RefreshVelocityBuffer();
     }
 }

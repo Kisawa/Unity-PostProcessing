@@ -17,14 +17,16 @@ Shader "PostProcessing/MotionVectors"
 			float4 prevPos : TEXCOORD1;
 		};
 
+		fixed4 _Color;
 		float4x4 _Prev_VP;
+		float4x4 _Prev_M;
 
 		v2f vert (appdata v)
         {
             v2f o;
             o.pos = UnityObjectToClipPos(v.vertex);
 			o.currentPos = ComputeScreenPos(o.pos);
-			o.prevPos = ComputeScreenPos(mul(_Prev_VP, mul(unity_ObjectToWorld, float4(v.vertex.xyz, 1.0))));
+			o.prevPos = ComputeScreenPos(mul(_Prev_VP, mul(_Prev_M, float4(v.vertex.xyz, 1.0))));
             return o;
         }
 
@@ -33,6 +35,7 @@ Shader "PostProcessing/MotionVectors"
             float2 currentSS = i.currentPos.xy / i.currentPos.w;
 			float2 prevSS = i.prevPos.xy / i.prevPos.w;
             return float4((currentSS - prevSS) * 0.5, 0, 0);
+			//return _Color;
         }
 		ENDCG
 

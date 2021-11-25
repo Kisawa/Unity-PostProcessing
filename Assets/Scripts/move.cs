@@ -4,6 +4,8 @@ using UnityEngine;
 
 public class move : MonoBehaviour
 {
+    [Range(1, 10)]
+    public float Length = 1;
     [Range(.1f, 3)]
     public float Speed = 1;
     Transform trans;
@@ -14,8 +16,8 @@ public class move : MonoBehaviour
     private void Awake()
     {
         trans = transform;
-        pos0 = trans.position + trans.right;
-        pos1 = trans.position - trans.right;
+        pos0 = trans.position + trans.right * Length;
+        pos1 = trans.position - trans.right * Length;
         pos = pos0;
     }
 

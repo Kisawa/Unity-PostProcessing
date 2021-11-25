@@ -145,7 +145,7 @@ Shader "PostProcessing/TAA"
         {
 			float2 uv = i.uv - _JitterTexelOffset.xy * _MainTex_TexelSize.xy;
 			float2 velocity = tex2D(_MotionVectorsTex, uv);
-			return fixed4(velocity, 0, 1);
+			return fixed4(velocity * 3000, 0, 1);
         }
 		ENDCG
 

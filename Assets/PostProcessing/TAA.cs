@@ -53,6 +53,9 @@ public class TAA : MonoBehaviour
         motionVectorsTex.filterMode = FilterMode.Point;
         material.SetTexture(_PrevTex, prevTex);
         material.SetTexture(_MotionVectorsTex, motionVectorsTex);
+        buffer = new CommandBuffer();
+        buffer.name = "VelocityBuffer";
+        cam.AddCommandBuffer(CameraEvent.AfterForwardOpaque, buffer);
     }
 
     void OnDisable()
@@ -64,8 +67,28 @@ public class TAA : MonoBehaviour
         cam.projectionMatrix = cam.nonJitteredProjectionMatrix;
         DestroyImmediate(prevTex);
         DestroyImmediate(motionVectorsTex);
-        cam.RemoveCommandBuffer(CameraEvent.AfterForwardAlpha, buffer);
-        buffer = null;
+        cam.RemoveCommandBuffer(CameraEvent.AfterForwardOpaque, buffer);
+    }
+
+    private void OnPreRender()
+    {
+        buffer.Clear();
+        buffer.SetRenderTarget(motionVectorsTex, BuiltinRenderTextureType.CameraTarget);
+        buffer.ClearRenderTarget(false, true, Color.clear);
+        motionVectorsMaterial.SetMatrix(_Prev_VP, prev_VP);
+        for (int i = 0; i < VelocityBufferTag.list.Count; i++)
+        {
+            VelocityBufferTag tag = VelocityBufferTag.list[i];
+            if (tag == null || !tag.IsAvailable)
+                continue;
+            MaterialPropertyBlock block = new MaterialPropertyBlock();
+            block.SetMatrix("_Prev_M", tag.PrevLocalToWorld);
+            block.SetColor("_Color", tag.col);
+            for (int j = 0; j < tag.Mesh.subMeshCount; j++)
+                buffer.DrawMesh(tag.Mesh, tag.LocalToWorld, motionVectorsMaterial, j, 0, block);
+            tag.PrevLocalToWorld = tag.LocalToWorld;
+        }
+        prev_VP = GL.GetGPUProjectionMatrix(cam.projectionMatrix, true) * cam.worldToCameraMatrix;
     }
 
     void OnPreCull()
@@ -84,8 +107,7 @@ public class TAA : MonoBehaviour
 
     void OnRenderImage(RenderTexture source, RenderTexture destination)
     {
-        motionVectorsMaterial.SetMatrix(_Prev_VP, prev_VP);
-        prev_VP = GL.GetGPUProjectionMatrix(cam.projectionMatrix, true) * cam.worldToCameraMatrix;
+        
 
         material.SetVector(_JitterTexelOffset, jitterTexelSize);
         material.SetVector(_Blend, new Vector2(BlendMin, BlendMax));
@@ -95,26 +117,6 @@ public class TAA : MonoBehaviour
         Graphics.Blit(tex, prevTex);
         Graphics.Blit(tex, destination);
         RenderTexture.ReleaseTemporary(tex);
-    }
-
-    public void RefreshVelocityBuffer()
-    {
-        if (!enabled)
-            return;
-        if (buffer != null)
-            cam.RemoveCommandBuffer(CameraEvent.AfterForwardAlpha, buffer);
-        buffer = new CommandBuffer();
-        buffer.name = "VelocityBuffer";
-        buffer.SetRenderTarget(motionVectorsTex, BuiltinRenderTextureType.CameraTarget);
-        buffer.ClearRenderTarget(false, true, Color.clear);
-        for (int i = 0; i < VelocityBufferTag.list.Count; i++)
-        {
-            VelocityBufferTag tag = VelocityBufferTag.list[i];
-            if (tag == null || !tag.IsAvailable)
-                continue;
-            buffer.DrawRenderer(tag.renderer, motionVectorsMaterial);
-        }
-        cam.AddCommandBuffer(CameraEvent.AfterForwardAlpha, buffer);
     }
 
     static float HaltonSeq(int refer, int index = 1/* NOT! zero-based */)
