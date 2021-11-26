@@ -33,7 +33,6 @@ Shader "PostProcessing/TAA"
 		sampler2D _CameraDepthTexture;
 		sampler2D _CameraMotionVectorsTexture;
 		sampler2D _PrevTex;
-		sampler2D _MotionVectorsTex;
 		float4 _JitterTexelOffset;
 		float2 _Blend;
 
@@ -64,6 +63,31 @@ Shader "PostProcessing/TAA"
 			return float4(YCoCgToRGB(YCoCg.xyz), YCoCg.w); 
 		}
 
+		static const float A = 0.15;
+		static const float B = 0.50;
+		static const float C = 0.10;
+		static const float D = 0.20;
+		static const float E = 0.02;
+		static const float F = 0.30;
+		static const float W = 11.2;
+
+		inline float3 Uncharted2Tonemap(float3 x)
+		{
+		   return ((x*(A*x+C*B)+D*E)/(x*(A*x+B)+D*F))-E/F;
+		}
+
+		inline float4 Tonemapping(float4 col)
+		{
+			float3 _col = col.rgb;
+			_col *= 16;
+			const float ExposureBias = 2.0;
+			_col = Uncharted2Tonemap(ExposureBias * _col);
+			float3 whiteScale = 1 / Uncharted2Tonemap(W);
+			_col *= whiteScale;
+			_col = pow(_col, 0.454545);
+			return float4(_col, col.a);
+		}
+
 		inline float SampleDepth(float2 uv)
 		{
 			return SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, uv);
@@ -72,6 +96,7 @@ Shader "PostProcessing/TAA"
 		inline float4 SampleYCoCg(float2 uv)
 		{
 			float4 col = tex2D(_MainTex, uv);
+			//col = Tonemapping(col);
 			return RGBToYCoCg(col);
 		}
 
@@ -134,18 +159,10 @@ Shader "PostProcessing/TAA"
 			float4 prevCol = RGBToYCoCg(tex2D(_PrevTex, prevUV));
 			prevCol.xyz = Clip_AABB(mean, stddev, prevCol);
 
-			float DIF = 1 - abs(col.r - prevCol.r) / max(col.r, max(prevCol.r, 0.2));
-			float weight_sqr = pow2(DIF);
-			float feedback = lerp(_Blend.x, _Blend.y, weight_sqr);
+			float DIF = 1 - abs(col.r - prevCol.r) / max(col.r, max(prevCol.r, 0.1));
+			float feedback = lerp(_Blend.x, _Blend.y, pow2(DIF));
 			float4 color_temporal = YCoCgToRGB(lerp(col, prevCol, feedback));
 			return color_temporal;
-        }
-
-		fixed4 frag_customMotion (v2f i) : SV_Target
-        {
-			float2 uv = i.uv - _JitterTexelOffset.xy * _MainTex_TexelSize.xy;
-			float2 velocity = tex2D(_MotionVectorsTex, uv);
-			return fixed4(velocity * 3000, 0, 1);
         }
 		ENDCG
 
@@ -158,13 +175,5 @@ Shader "PostProcessing/TAA"
             #pragma fragment frag_TAA
             ENDCG
         }
-
-		Pass
-		{
-			CGPROGRAM
-			#pragma vertex vert
-			#pragma fragment frag_customMotion;
-			ENDCG
-		}
     }
 }

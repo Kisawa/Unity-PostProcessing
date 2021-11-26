@@ -7,41 +7,30 @@ using UnityEngine.Rendering;
 [RequireComponent(typeof(Camera))]
 public class TAA : MonoBehaviour
 {
-    public static TAA Self;
-
     [Range(0, 10)]
     public float JitterSpread = 0.75f;
     [Range(0, 1)]
-    public float BlendMin = .88f;
+    public float BlendMin = .75f;
     [Range(0, 1)]
-    public float BlendMax = .97f;
+    public float BlendMax = .95f;
 
-    const int k_SampleCount = 8;
-    int sampleIndex;
+    const int _JitterCount = 8;
+    int jitterIndex;
     Vector4 jitterTexelSize;
-    Matrix4x4 prev_VP;
-    CommandBuffer buffer;
 
     Camera cam;
     Material material;
-    Material motionVectorsMaterial;
     RenderTexture prevTex;
-    RenderTexture motionVectorsTex;
 
     static int _PrevTex = Shader.PropertyToID("_PrevTex");
-    static int _MotionVectorsTex = Shader.PropertyToID("_MotionVectorsTex");
-    static int _Prev_VP = Shader.PropertyToID("_Prev_VP");
     static int _JitterTexelOffset = Shader.PropertyToID("_JitterTexelOffset");
     static int _Blend = Shader.PropertyToID("_Blend");
 
     void Awake()
     {
-        Self = this;
         cam = GetComponent<Camera>();
         material = new Material(Shader.Find("PostProcessing/TAA"));
         material.hideFlags = HideFlags.HideAndDontSave;
-        motionVectorsMaterial = new Material(Shader.Find("PostProcessing/MotionVectors"));
-        motionVectorsMaterial.hideFlags = HideFlags.HideAndDontSave;
     }
 
     void OnEnable()
@@ -49,54 +38,25 @@ public class TAA : MonoBehaviour
         cam.depthTextureMode |= DepthTextureMode.Depth;
         cam.depthTextureMode |= DepthTextureMode.MotionVectors;
         prevTex = new RenderTexture(cam.pixelWidth, cam.pixelHeight, 0, RenderTextureFormat.ARGBHalf);
-        motionVectorsTex = new RenderTexture(cam.pixelWidth, cam.pixelHeight, 16, RenderTextureFormat.RGFloat);
-        motionVectorsTex.filterMode = FilterMode.Point;
         material.SetTexture(_PrevTex, prevTex);
-        material.SetTexture(_MotionVectorsTex, motionVectorsTex);
-        buffer = new CommandBuffer();
-        buffer.name = "VelocityBuffer";
-        cam.AddCommandBuffer(CameraEvent.AfterForwardOpaque, buffer);
     }
 
     void OnDisable()
     {
         cam.depthTextureMode &= ~DepthTextureMode.MotionVectors;
         cam.depthTextureMode &= ~DepthTextureMode.Depth;
-        sampleIndex = 0;
+        jitterIndex = 0;
         jitterTexelSize = Vector4.zero;
         cam.projectionMatrix = cam.nonJitteredProjectionMatrix;
         DestroyImmediate(prevTex);
-        DestroyImmediate(motionVectorsTex);
-        cam.RemoveCommandBuffer(CameraEvent.AfterForwardOpaque, buffer);
-    }
-
-    private void OnPreRender()
-    {
-        buffer.Clear();
-        buffer.SetRenderTarget(motionVectorsTex, BuiltinRenderTextureType.CameraTarget);
-        buffer.ClearRenderTarget(false, true, Color.clear);
-        motionVectorsMaterial.SetMatrix(_Prev_VP, prev_VP);
-        for (int i = 0; i < VelocityBufferTag.list.Count; i++)
-        {
-            VelocityBufferTag tag = VelocityBufferTag.list[i];
-            if (tag == null || !tag.IsAvailable)
-                continue;
-            MaterialPropertyBlock block = new MaterialPropertyBlock();
-            block.SetMatrix("_Prev_M", tag.PrevLocalToWorld);
-            block.SetColor("_Color", tag.col);
-            for (int j = 0; j < tag.Mesh.subMeshCount; j++)
-                buffer.DrawMesh(tag.Mesh, tag.LocalToWorld, motionVectorsMaterial, j, 0, block);
-            tag.PrevLocalToWorld = tag.LocalToWorld;
-        }
-        prev_VP = GL.GetGPUProjectionMatrix(cam.projectionMatrix, true) * cam.worldToCameraMatrix;
     }
 
     void OnPreCull()
     {
-        Vector2 offset = new Vector2(HaltonSeq(2, sampleIndex + 1), HaltonSeq(3, sampleIndex + 1));
+        Vector2 offset = new Vector2(HaltonSeq(2, jitterIndex + 1), HaltonSeq(3, jitterIndex + 1));
         offset = (offset - Vector2.one * 0.5f) * JitterSpread;
-        sampleIndex++;
-        sampleIndex = sampleIndex >= k_SampleCount ? 0 : sampleIndex;
+        jitterIndex++;
+        jitterIndex = jitterIndex >= _JitterCount ? 0 : jitterIndex;
         Matrix4x4 proj = CalcProjectionMatrix(cam, offset);
         jitterTexelSize.z = jitterTexelSize.x;
         jitterTexelSize.w = jitterTexelSize.y;
@@ -107,13 +67,11 @@ public class TAA : MonoBehaviour
 
     void OnRenderImage(RenderTexture source, RenderTexture destination)
     {
-        
-
         material.SetVector(_JitterTexelOffset, jitterTexelSize);
         material.SetVector(_Blend, new Vector2(BlendMin, BlendMax));
 
         RenderTexture tex = RenderTexture.GetTemporary(source.descriptor);
-        Graphics.Blit(source, tex, material, 1);
+        Graphics.Blit(source, tex, material, 0);
         Graphics.Blit(tex, prevTex);
         Graphics.Blit(tex, destination);
         RenderTexture.ReleaseTemporary(tex);
