@@ -63,29 +63,27 @@ Shader "PostProcessing/TAA"
 			return float4(YCoCgToRGB(YCoCg.xyz), YCoCg.w); 
 		}
 
-		static const float A = 0.15;
-		static const float B = 0.50;
-		static const float C = 0.10;
-		static const float D = 0.20;
-		static const float E = 0.02;
-		static const float F = 0.30;
-		static const float W = 11.2;
-
-		inline float3 Uncharted2Tonemap(float3 x)
-		{
-		   return ((x*(A*x+C*B)+D*E)/(x*(A*x+B)+D*F))-E/F;
-		}
-
+		#define TONE_BOUND 1
+		#define TONE_RANGE 10
 		inline float4 Tonemapping(float4 col)
 		{
-			float3 _col = col.rgb;
-			_col *= 16;
-			const float ExposureBias = 2.0;
-			_col = Uncharted2Tonemap(ExposureBias * _col);
-			float3 whiteScale = 1 / Uncharted2Tonemap(W);
-			_col *= whiteScale;
-			_col = pow(_col, 0.454545);
-			return float4(_col, col.a);
+			float3 _col;
+			float Lum = Luminance(col);
+			[flatten]
+			if(Lum <= TONE_BOUND)
+				return col;
+			else
+				return float4(col.rgb * (pow2(TONE_BOUND) - Lum * TONE_RANGE) / (Lum * (2 * TONE_BOUND - TONE_RANGE - Lum)), col.a);
+		}
+
+		inline float4 InvTonemapping(float4 col)
+		{
+			float Lum = Luminance(col);
+			[flatten]
+			if(Lum <= TONE_BOUND)
+				return col;
+			else
+				return float4(col.rgb * (pow2(TONE_BOUND) - (2 * TONE_BOUND - TONE_RANGE) * Lum) / (Lum * (TONE_RANGE - Lum)), col.a);
 		}
 
 		inline float SampleDepth(float2 uv)
@@ -96,7 +94,7 @@ Shader "PostProcessing/TAA"
 		inline float4 SampleYCoCg(float2 uv)
 		{
 			float4 col = tex2D(_MainTex, uv);
-			//col = Tonemapping(col);
+			col = Tonemapping(col);
 			return RGBToYCoCg(col);
 		}
 
@@ -161,7 +159,7 @@ Shader "PostProcessing/TAA"
 
 			float DIF = 1 - abs(col.r - prevCol.r) / max(col.r, max(prevCol.r, 0.1));
 			float feedback = lerp(_Blend.x, _Blend.y, pow2(DIF));
-			float4 color_temporal = YCoCgToRGB(lerp(col, prevCol, feedback));
+			float4 color_temporal = YCoCgToRGB(InvTonemapping(lerp(col, prevCol, feedback)));
 			return color_temporal;
         }
 		ENDCG
