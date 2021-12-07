@@ -7,6 +7,8 @@ using UnityEngine.Rendering;
 [RequireComponent(typeof(Camera))]
 public class TAA : MonoBehaviour
 {
+    public static TAA Self;
+
     [Range(0, 10)]
     public float JitterSpread = 0.75f;
     [Range(0, 1)]
@@ -28,6 +30,7 @@ public class TAA : MonoBehaviour
 
     void Awake()
     {
+        Self = this;
         cam = GetComponent<Camera>();
         material = new Material(Shader.Find("PostProcessing/TAA"));
         material.hideFlags = HideFlags.HideAndDontSave;

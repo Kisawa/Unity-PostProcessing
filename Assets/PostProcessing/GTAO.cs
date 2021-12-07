@@ -9,6 +9,8 @@ namespace PostProcessing
     [RequireComponent(typeof(Camera))]
     public class GTAO : MonoBehaviour
     {
+        public static GTAO Self;
+
         public ViewType ViewType = ViewType.Combine;
         [Range(3, 12)]
         public int SampleDirectionCount = 3;
@@ -54,6 +56,7 @@ namespace PostProcessing
 
         void Awake()
         {
+            Self = this;
             cam = GetComponent<Camera>();
             material = new Material(Shader.Find("PostProcessing/GTAO"));
             material.hideFlags = HideFlags.HideAndDontSave;
