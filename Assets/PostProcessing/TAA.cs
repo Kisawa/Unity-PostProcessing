@@ -9,7 +9,7 @@ public class TAA : MonoBehaviour
 {
     public static TAA Self;
 
-    [Range(0, 10)]
+    [Range(0, 1)]
     public float JitterSpread = 0.75f;
     [Range(0, 1)]
     public float BlendMin = .75f;
