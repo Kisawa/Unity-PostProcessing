@@ -50,7 +50,6 @@ namespace PostProcessing
         static int _MultiBounce = Shader.PropertyToID("_MultiBounce");
         static int _AOMap = Shader.PropertyToID("_AOMap");
 
-        static int _BlurIterations = Shader.PropertyToID("_BlurIterations");
         static int _BlurSpread = Shader.PropertyToID("_BlurSpread");
         static int _BlurThreshold = Shader.PropertyToID("_BlurThreshold");
 
@@ -90,7 +89,6 @@ namespace PostProcessing
             int width = source.width;
             int height = source.height;
             material.SetVector(_TexelSize, new Vector4(1f / width, 1f / height, width, height));
-            material.SetFloat(_BlurIterations, BlurIterations);
             material.SetFloat(_BlurSpread, BlurSpread);
             material.SetFloat(_BlurThreshold, BlurThreshold);
 

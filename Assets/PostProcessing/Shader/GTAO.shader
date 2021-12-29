@@ -62,6 +62,28 @@ Shader "PostProcessing/GTAO"
 			return CalcViewPos(uv, SampleDepth01(uv));
 		}
 
+		inline float3 GetViewNormal(float2 uv)
+		{
+			float3 P0 = GetViewPos(uv);
+			float3 P1 = GetViewPos(uv + float2(1, 0) * _TexelSize.xy);
+			float3 P2 = GetViewPos(uv + float2(0, 1) * _TexelSize.xy);
+			//float3 P3 = GetViewPos(uv + float2(-1, 0) * _TexelSize.xy);
+			//float3 P4 = GetViewPos(uv + float2(0, -1) * _TexelSize.xy);
+
+			float3 d1 = P1 - P0;
+            float3 d2 = P2 - P0;
+            //float3 d3 = P0 - P3;
+            //float3 d4 = P0 - P4;
+
+			//float3 h = abs(d1.z) < abs(d3.z) ? d1 : d3;
+            //float3 v = abs(d2.z) < abs(d4.z) ? d2 : d4;
+
+			//float3 normal = normalize(cross(v, h));
+			float3 normal = normalize(cross(d2, d1));
+			//float3 normal = normalize(cross(ddx(P0), ddy(P0)));
+			return normal;
+		}
+
 		inline float IntegrateArc_UniformWeight(float2 h)
 		{
 			float2 Arc = 1 - cos(h);
