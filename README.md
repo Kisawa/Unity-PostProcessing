@@ -1,5 +1,5 @@
 # Unity-PostProcessing
-## There are two screen effects in this repository:  
+## Here are two screen effects in this repository:  
 * Ground Truth Ambient Occlusion
 * Temporal Anti-Aliasing
 
