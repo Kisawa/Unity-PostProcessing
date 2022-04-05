@@ -13,7 +13,7 @@ URP support: https://github.com/Kisawa/Unity-URP_Example
 * AO:  
 ![image](https://user-images.githubusercontent.com/71002504/161784837-6afe81ff-00c9-4e32-9616-cf5628ddd72d.png)  
 
-* Merge: (with TAA)   
+* GTAO: (with TAA)   
 ![微信图片_20220405172603](https://user-images.githubusercontent.com/71002504/161784877-3a52d053-5b8e-4fe0-af4d-aed595db14da.png)  
 
 ****
