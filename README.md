@@ -4,8 +4,8 @@
 * Temporal Anti-Aliasing
 
 Only the implementation method is provided.  
-Do not use it directly in a project.
-URP support: https://github.com/Kisawa/Unity-URP_Example
+Do not use it directly in a project.  
+URP support: https://github.com/Kisawa/Unity-URP_Example  
 
 * Origin: (with TAA)  
 ![微信图片_20220405172652](https://user-images.githubusercontent.com/71002504/161784924-d90af643-8386-42aa-854a-e81491a4c707.png)  
