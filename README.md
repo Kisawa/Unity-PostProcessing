@@ -9,7 +9,7 @@
 ****
 * Origin: (with TAA)  
 
-![微信图片_20220405172652](https://user-images.githubusercontent.com/71002504/161784924-d90af643-8386-42aa-854a-e81491a4c707.png)  
+![image](https://user-images.githubusercontent.com/71002504/161784924-d90af643-8386-42aa-854a-e81491a4c707.png)  
 
 * AO:  
 
@@ -17,7 +17,7 @@
 
 * GTAO: (with TAA)   
 
-![微信图片_20220405172603](https://user-images.githubusercontent.com/71002504/161784877-3a52d053-5b8e-4fe0-af4d-aed595db14da.png)  
+![image](https://user-images.githubusercontent.com/71002504/161784877-3a52d053-5b8e-4fe0-af4d-aed595db14da.png)  
 
 ****
 * No TAA:  
