@@ -3,9 +3,9 @@
 * Ground Truth Ambient Occlusion
 * Temporal Anti-Aliasing
 
-Only the implementation method is provided.  
-Do not use it directly in a project.  
-URP support: https://github.com/Kisawa/Unity-URP_Example  
+>Only the implementation method is provided.  
+>Do not use it directly in a project.  
+>URP support: https://github.com/Kisawa/Unity-URP_Example  
 ****
 * Origin: (with TAA)  
 
